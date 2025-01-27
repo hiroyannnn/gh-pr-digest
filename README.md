@@ -4,7 +4,7 @@ GitHubの今日作成されたPull Requestsを簡単に確認できるGitHub CLI
 
 ## 概要
 
-`gh pr-digest`（または短縮コマンド `gh prd`）は、GitHub CLIの拡張として動作し、指定した組織やリポジトリの今日作成されたPull Requestsの一覧を表示します。
+`gh pr-digest`（または短縮コマンド `gh prd`）は、GitHub CLIの拡張として動作し、指定した組織やリポジトリのPull Requestsの一覧を表示します。
 
 ## インストール
 
@@ -32,6 +32,9 @@ gh prd -o <organization>
 # 特定のリポジトリのPRを表示
 gh prd -r <owner>/<repository>
 
+# 日付範囲を指定して表示
+gh prd --since 2024-01-25 --until 2024-01-25
+
 # 出力形式を指定（テキスト/JSON）
 gh prd --format json
 ```
@@ -39,14 +42,17 @@ gh prd --format json
 ### 出力例
 
 ```
-Today's Pull Requests (2024-03-21):
+Your Pull Requests (2024-01-25 〜 2024-01-25):
 
-[user/repo] Fix bug in login process (#123)
-https://github.com/user/repo/pull/123
-
-[user/repo] Add new feature (#124)
-https://github.com/user/repo/pull/124
+🟣 新機能の追加
+https://github.com/owner/repo/pull/562
 ```
+
+PRのステータスは絵文字で表示されます：
+
+- 🟢：オープン
+- 🔴：クローズ
+- 🟣：マージ済み
 
 ## 必要条件
 
