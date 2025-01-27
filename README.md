@@ -12,6 +12,12 @@ GitHubの今日作成されたPull Requestsを簡単に確認できるGitHub CLI
 gh extension install hiroyannnn/gh-pr-digest
 ```
 
+エイリアスを設定する場合は、以下のコマンドを実行してください：
+
+```bash
+gh alias set prd 'pr-digest'
+```
+
 ## 使い方
 
 ### 基本的な使用方法
