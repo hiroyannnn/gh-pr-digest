@@ -9,7 +9,7 @@ GitHubの今日作成されたPull Requestsを簡単に確認できるGitHub CLI
 ## インストール
 
 ```bash
-gh extension install <your-username>/gh-pr-digest
+gh extension install hiroyannnn/gh-pr-digest
 ```
 
 ## 使い方
