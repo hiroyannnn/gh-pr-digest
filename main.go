@@ -92,12 +92,14 @@ func outputText(prs []client.PullRequest, since, until string) error {
 			stateStr = "🟣" // 紫：マージ済み
 		} else if pr.State == "closed" {
 			stateStr = "🔴" // 赤：クローズ
+		} else if pr.Draft {
+			stateStr = "⚪️" // 白：ドラフト
 		} else {
 			stateStr = "🟢" // 緑：オープン
 		}
 
 		// fmt.Printf("%s [%s] %s (#%d)\n", stateStr, pr.Repository.FullName, pr.Title, pr.Number)
-		fmt.Printf("%s%s\n", stateStr, pr.Title)
+		fmt.Printf("%s %s\n", stateStr, pr.Title)
 		// fmt.Printf("Created: %s, Updated: %s\n",
 		// 	pr.CreatedAt.Format("2006-01-02 15:04"),
 		// 	pr.UpdatedAt.Format("2006-01-02 15:04"))

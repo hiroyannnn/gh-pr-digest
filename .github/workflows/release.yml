@@ -1,0 +1,75 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - os: windows
+            arch: amd64
+            ext: .exe
+          - os: darwin
+            arch: amd64
+            ext: ""
+          - os: darwin
+            arch: arm64
+            ext: ""
+          - os: linux
+            arch: amd64
+            ext: ""
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+          cache: true
+
+      - name: Build
+        env:
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.arch }}
+        run: |
+          go build -o gh-pr-digest-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: gh-pr-digest-${{ matrix.os }}-${{ matrix.arch }}
+          path: gh-pr-digest-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Create Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag_name="${GITHUB_REF#refs/tags/}"
+          gh release create "$tag_name" \
+            --title "Release $tag_name" \
+            --draft \
+            ./gh-pr-digest-*/*
+
+          echo "## インストール方法" >> release_notes.md
+          echo "\`\`\`bash" >> release_notes.md
+          echo "gh extension install hiroyannnn/gh-pr-digest" >> release_notes.md
+          echo "\`\`\`" >> release_notes.md
+
+          gh release edit "$tag_name" --notes-file release_notes.md
+

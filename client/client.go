@@ -18,6 +18,7 @@ type PullRequest struct {
 	UpdatedAt  time.Time `json:"updated_at"`
 	State      string    `json:"state"`
 	Merged     bool      `json:"merged"`
+	Draft      bool      `json:"draft"`
 	Number     int       `json:"number"`
 	Repository struct {
 		FullName string `json:"full_name"`
@@ -102,6 +103,7 @@ func (c *PRClient) FetchTodaysPRs(org, repo, since, until string) ([]PullRequest
 			UpdatedAt  time.Time `json:"updated_at"`
 			State      string    `json:"state"`
 			Merged     bool      `json:"merged"`
+			Draft      bool      `json:"draft"`
 			Number     int       `json:"number"`
 			Repository struct {
 				FullName string `json:"full_name"`
@@ -124,6 +126,7 @@ func (c *PRClient) FetchTodaysPRs(org, repo, since, until string) ([]PullRequest
 			UpdatedAt: prDetail.UpdatedAt,
 			State:     prDetail.State,
 			Merged:    prDetail.Merged,
+			Draft:     prDetail.Draft,
 			Number:    prDetail.Number,
 			Repository: struct {
 				FullName string `json:"full_name"`
@@ -269,7 +272,8 @@ func buildSearchQuery(org, repo, since, until string) string {
 	}
 
 	// 作者が自分のPRを検索（コミットは別途確認）
-	query := fmt.Sprintf("is:pr %s author:@me", dateRange)
+	// draft:*を追加してドラフトPRも含める
+	query := fmt.Sprintf("is:pr %s author:@me draft:*", dateRange)
 
 	if org != "" {
 		query += fmt.Sprintf(" org:%s", org)
