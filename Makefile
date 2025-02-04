@@ -15,6 +15,12 @@ reinstall-local: ## ローカルの拡張機能を再インストール（更新
 	@$(MAKE) install-local
 	@echo "再インストールが完了しました"
 
+reinstall-prod: ## プロダクションの拡張機能を再インストール（更新用）
+	@echo "拡張機能を再インストールします..."
+	@gh extension remove gh-pr-digest 2>/dev/null || true
+	@gh extension install hiroyannnn/gh-pr-digest
+	@echo "再インストールが完了しました"
+
 test: ## テストを実行
 	go test ./...
 
