@@ -15,7 +15,13 @@ reinstall-local: ## ローカルの拡張機能を再インストール（更新
 	@$(MAKE) install-local
 	@echo "再インストールが完了しました"
 
-release: test ## 新しいリリースを作成 (例: make release version=1.0.0)
+test: ## テストを実行
+	go test ./...
+
+test-v: ## テストを詳細なログ付きで実行
+	go test -v ./...
+
+release: ## 新しいリリースを作成 (例: make release version=1.0.0)
 	@if [ -z "$(version)" ]; then \
 		echo "バージョンを指定してください (例: make release version=1.0.0)"; \
 		exit 1; \
@@ -28,6 +34,12 @@ release: test ## 新しいリリースを作成 (例: make release version=1.0.0
 		echo "タグ v$(version) は既に存在します"; \
 		echo "新しいバージョン番号を指定してください"; \
 		echo "または 'make delete-tag version=$(version)' を実行してタグを削除してください"; \
+		exit 1; \
+	fi
+	@echo "テストを実行中..."
+	@if ! make test > /dev/null; then \
+		echo "テストが失敗しました"; \
+		echo "詳細を確認するには 'make test-v' を実行してください"; \
 		exit 1; \
 	fi
 	@echo "v$(version) をリリースします..."
@@ -49,6 +61,3 @@ delete-tag: ## タグを削除 (例: make delete-tag version=1.0.0)
 	@git push origin --delete "v$(version)"
 	@git tag -d "v$(version)"
 	@echo "タグを削除しました"
-
-test: ## テストを実行
-	go test -v ./...
