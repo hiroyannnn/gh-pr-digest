@@ -63,6 +63,7 @@ func (c *PRClient) FetchTodaysPRs(org, repo, since, until string) ([]PullRequest
 			CreatedAt  time.Time `json:"created_at"`
 			UpdatedAt  time.Time `json:"updated_at"`
 			State      string    `json:"state"`
+			Draft      bool      `json:"draft"`
 			Number     int       `json:"number"`
 			Repository struct {
 				FullName string `json:"full_name"`
@@ -115,21 +116,38 @@ func (c *PRClient) FetchTodaysPRs(org, repo, since, until string) ([]PullRequest
 
 		repoPath := extractRepoFullName(item.URL)
 		prPath := fmt.Sprintf("repos/%s/pulls/%d", repoPath, item.Number)
+
+		// デバッグ出力を追加
+		c.debugPrint("PR API パス: %s\n", prPath)
+		c.debugPrint("  元のURL: %s\n", item.URL)
+		c.debugPrint("  変換後のURL: %s\n", convertToPullsURL(item.URL))
+
 		err := c.client.Get(prPath, &prDetail)
 		if err != nil {
 			c.debugPrint("PR詳細の取得に失敗: %v\n", err)
 			continue
 		}
 
+		// デバッグ出力を追加
+		c.debugPrint("PR詳細: [%s] %s (#%d)\n", repoPath, prDetail.Title, prDetail.Number)
+		c.debugPrint("  Draft (Search API): %v\n", item.Draft)
+		c.debugPrint("  Draft (Pulls API): %v\n", prDetail.Draft)
+		c.debugPrint("  State: %s\n", prDetail.State)
+		c.debugPrint("  Merged: %v\n", prDetail.Merged)
+		c.debugPrint("  URL: %s\n", prDetail.URL)
+
+		// Search APIとPulls APIの両方からドラフト状態を確認
+		isDraft := prDetail.Draft || item.Draft
+
 		prs = append(prs, PullRequest{
 			Title:     prDetail.Title,
-			URL:       prDetail.URL,
+			URL:       convertToPullsURL(item.URL), // URLを/pullsに変換
 			HTMLURL:   prDetail.HTMLURL,
 			CreatedAt: prDetail.CreatedAt,
 			UpdatedAt: prDetail.UpdatedAt,
 			State:     prDetail.State,
 			Merged:    prDetail.Merged,
-			Draft:     prDetail.Draft,
+			Draft:     isDraft,
 			Number:    prDetail.Number,
 			Repository: struct {
 				FullName string `json:"full_name"`
@@ -155,12 +173,16 @@ func (c *PRClient) FetchTodaysPRs(org, repo, since, until string) ([]PullRequest
 }
 
 func extractRepoFullName(apiURL string) string {
-	// URLの形式: https://api.github.com/repos/owner/repo/issues/number
 	parts := strings.Split(apiURL, "/")
 	if len(parts) >= 6 {
 		return fmt.Sprintf("%s/%s", parts[4], parts[5])
 	}
 	return ""
+}
+
+// /issues URLを/pulls URLに変換する
+func convertToPullsURL(issuesURL string) string {
+	return strings.Replace(issuesURL, "/issues/", "/pulls/", 1)
 }
 
 func (c *PRClient) hasMyCommitInRange(pr PullRequest, since, until string) (bool, error) {
@@ -275,8 +297,8 @@ func buildSearchQuery(org, repo, since, until string) string {
 	}
 
 	// 作者が自分のPRを検索（コミットは別途確認）
-	// draft:*を追加してドラフトPRも含める
-	query := fmt.Sprintf("is:pr %s author:@me draft:*", dateRange)
+	// draft:trueとdraft:falseの両方を含めるためにis:prのみを使用
+	query := fmt.Sprintf("is:pr %s author:@me", dateRange)
 
 	if org != "" {
 		query += fmt.Sprintf(" org:%s", org)

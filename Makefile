@@ -1,7 +1,19 @@
-.PHONY: help release test build delete-tag
+.PHONY: help release test build delete-tag install-local reinstall-local
 
 help: ## コマンド一覧を表示
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
+
+build: ## バイナリをビルド
+	go build
+
+install-local: build ## ローカルの拡張機能をインストール
+	gh extension install .
+
+reinstall-local: ## ローカルの拡張機能を再インストール（更新用）
+	@echo "拡張機能を再インストールします..."
+	@gh extension remove gh-pr-digest 2>/dev/null || true
+	@$(MAKE) install-local
+	@echo "再インストールが完了しました"
 
 release: test ## 新しいリリースを作成 (例: make release version=1.0.0)
 	@if [ -z "$(version)" ]; then \
