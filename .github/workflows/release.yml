@@ -77,6 +77,13 @@ jobs:
           echo "\`\`\`bash" >> release_notes.md
           echo "gh extension install hiroyannnn/gh-pr-digest" >> release_notes.md
           echo "\`\`\`" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "## 更新方法" >> release_notes.md
+          echo "\`\`\`bash" >> release_notes.md
+          echo "gh extension upgrade gh-pr-digest" >> release_notes.md
+          echo "# または" >> release_notes.md
+          echo "gh extension remove gh-pr-digest && gh extension install hiroyannnn/gh-pr-digest" >> release_notes.md
+          echo "\`\`\`" >> release_notes.md
 
           # アーティファクトを適切なディレクトリに移動
           mkdir -p release

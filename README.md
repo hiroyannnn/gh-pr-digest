@@ -18,6 +18,16 @@ gh extension install hiroyannnn/gh-pr-digest
 gh alias set prd 'pr-digest'
 ```
 
+## 更新方法
+
+```bash
+# 通常の更新
+gh extension upgrade gh-pr-digest
+
+# または、完全に再インストール
+gh extension remove gh-pr-digest && gh extension install hiroyannnn/gh-pr-digest
+```
+
 ## 使い方
 
 ### 基本的な使用方法
