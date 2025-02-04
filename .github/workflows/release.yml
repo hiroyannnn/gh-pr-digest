@@ -82,3 +82,11 @@ jobs:
             --notes-file release_notes.md \
             ./dist/**/*
 
+      - name: Publish Release
+        if: success()  # 前のステップが全て成功した場合のみ実行
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag_name="${GITHUB_REF#refs/tags/}"
+          gh release edit "$tag_name" --draft=false
+
