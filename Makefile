@@ -12,6 +12,11 @@ release: test ## 新しいリリースを作成 (例: make release version=1.0.0
 		echo "コミットされていない変更があります"; \
 		exit 1; \
 	fi
+	@if git rev-parse "v$(version)" >/dev/null 2>&1; then \
+		echo "タグ v$(version) は既に存在します"; \
+		echo "新しいバージョン番号を指定してください"; \
+		exit 1; \
+	fi
 	@echo "v$(version) をリリースします..."
 	@git tag "v$(version)"
 	@git push origin "v$(version)"
