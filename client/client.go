@@ -10,6 +10,9 @@ import (
 	"github.com/cli/go-gh/pkg/api"
 )
 
+// テスト用にtime.Now()をモック可能にする
+var timeNow = time.Now
+
 type PullRequest struct {
 	Title      string    `json:"title"`
 	URL        string    `json:"url"`
@@ -179,13 +182,13 @@ func (c *PRClient) hasMyCommitInRange(pr PullRequest, since, until string) (bool
 	if since != "" {
 		sinceTime, err1 = time.Parse("2006-01-02", since)
 	} else {
-		sinceTime = time.Now().Truncate(24 * time.Hour) // 今日の0時
+		sinceTime = timeNow().Truncate(24 * time.Hour) // 今日の0時
 	}
 	if until != "" {
 		untilTime, err2 = time.Parse("2006-01-02", until)
 		untilTime = untilTime.Add(24 * time.Hour) // 指定日の終わり
 	} else {
-		untilTime = time.Now().Add(24 * time.Hour) // 明日の0時
+		untilTime = timeNow().Add(24 * time.Hour) // 明日の0時
 	}
 	if err1 != nil || err2 != nil {
 		return false, fmt.Errorf("日付の解析に失敗: %v, %v", err1, err2)
@@ -268,7 +271,7 @@ func buildSearchQuery(org, repo, since, until string) string {
 	} else if until != "" {
 		dateRange = fmt.Sprintf("updated:<=%s", until)
 	} else {
-		dateRange = fmt.Sprintf("updated:%s", time.Now().Format("2006-01-02"))
+		dateRange = fmt.Sprintf("updated:%s", timeNow().Format("2006-01-02"))
 	}
 
 	// 作者が自分のPRを検索（コミットは別途確認）
