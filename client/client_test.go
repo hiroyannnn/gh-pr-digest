@@ -28,7 +28,7 @@ func TestBuildSearchQuery(t *testing.T) {
 			repo:     "",
 			since:    "",
 			until:    "",
-			expected: "is:pr updated:" + fixedDate + " author:@me draft:*",
+			expected: "is:pr updated:" + fixedDate + " author:@me",
 		},
 		{
 			name:     "組織指定",
@@ -36,7 +36,7 @@ func TestBuildSearchQuery(t *testing.T) {
 			repo:     "",
 			since:    "",
 			until:    "",
-			expected: "is:pr updated:" + fixedDate + " author:@me draft:* org:testorg",
+			expected: "is:pr updated:" + fixedDate + " author:@me org:testorg",
 		},
 		{
 			name:     "リポジトリ指定",
@@ -44,7 +44,7 @@ func TestBuildSearchQuery(t *testing.T) {
 			repo:     "owner/repo",
 			since:    "",
 			until:    "",
-			expected: "is:pr updated:" + fixedDate + " author:@me draft:* repo:owner/repo",
+			expected: "is:pr updated:" + fixedDate + " author:@me repo:owner/repo",
 		},
 		{
 			name:     "日付範囲指定",
@@ -52,7 +52,7 @@ func TestBuildSearchQuery(t *testing.T) {
 			repo:     "",
 			since:    "2024-01-01",
 			until:    "2024-01-31",
-			expected: "is:pr updated:2024-01-01..2024-01-31 author:@me draft:*",
+			expected: "is:pr updated:2024-01-01..2024-01-31 author:@me",
 		},
 		{
 			name:     "すべての条件指定",
@@ -60,7 +60,7 @@ func TestBuildSearchQuery(t *testing.T) {
 			repo:     "owner/repo",
 			since:    "2024-01-01",
 			until:    "2024-01-31",
-			expected: "is:pr updated:2024-01-01..2024-01-31 author:@me draft:* org:testorg repo:owner/repo",
+			expected: "is:pr updated:2024-01-01..2024-01-31 author:@me org:testorg repo:owner/repo",
 		},
 	}
 
@@ -145,11 +145,9 @@ func setupMockServer(t *testing.T, responses map[string]interface{}) (*httptest.
 	}))
 
 	client := &PRClient{
-		client: &mockRESTClient{
-			baseURL: server.URL,
-			t:       t,
-		},
-		debug: true,
+		client:      &mockRESTClient{baseURL: server.URL, t: t},
+		debug:       true,
+		commitCache: make(map[string]bool),
 	}
 
 	return server, client
@@ -221,7 +219,7 @@ func TestPRClient_FetchTodaysPRs(t *testing.T) {
 	timeNow = func() time.Time { return now }
 	defer func() { timeNow = time.Now }()
 
-	searchPath := fmt.Sprintf("/search/issues?order=desc&q=is%%3Apr+updated%%3A%s+author%%3A%%40me+draft%%3A%%2A&sort=updated", fixedDate)
+	searchPath := fmt.Sprintf("/search/issues?order=desc&per_page=100&q=is%%3Apr+updated%%3A%s+author%%3A%%40me&sort=updated", fixedDate)
 
 	// モックレスポンスの準備
 	searchResponse := struct {
@@ -232,6 +230,7 @@ func TestPRClient_FetchTodaysPRs(t *testing.T) {
 			CreatedAt  time.Time `json:"created_at"`
 			UpdatedAt  time.Time `json:"updated_at"`
 			State      string    `json:"state"`
+			Draft      bool      `json:"draft"`
 			Number     int       `json:"number"`
 			Repository struct {
 				FullName string `json:"full_name"`
@@ -247,6 +246,7 @@ func TestPRClient_FetchTodaysPRs(t *testing.T) {
 			CreatedAt  time.Time `json:"created_at"`
 			UpdatedAt  time.Time `json:"updated_at"`
 			State      string    `json:"state"`
+			Draft      bool      `json:"draft"`
 			Number     int       `json:"number"`
 			Repository struct {
 				FullName string `json:"full_name"`
@@ -255,17 +255,19 @@ func TestPRClient_FetchTodaysPRs(t *testing.T) {
 		}{
 			{
 				Title:     "Test PR",
-				URL:       "https://api.github.com/repos/owner/repo/pulls/1",
+				URL:       "https://api.github.com/repos/owner/repo/issues/1",
 				HTMLURL:   "https://github.com/owner/repo/pull/1",
 				CreatedAt: now,
 				UpdatedAt: now,
-				State:     "open",
+				State:     "closed",
+				Draft:     false,
 				Number:    1,
 				Repository: struct {
 					FullName string `json:"full_name"`
 					HTMLURL  string `json:"html_url"`
 				}{
 					FullName: "owner/repo",
+					HTMLURL:  "https://github.com/owner/repo",
 				},
 			},
 		},
@@ -273,33 +275,9 @@ func TestPRClient_FetchTodaysPRs(t *testing.T) {
 	}
 
 	prResponse := struct {
-		Title      string    `json:"title"`
-		URL        string    `json:"url"`
-		HTMLURL    string    `json:"html_url"`
-		CreatedAt  time.Time `json:"created_at"`
-		UpdatedAt  time.Time `json:"updated_at"`
-		State      string    `json:"state"`
-		Merged     bool      `json:"merged"`
-		Draft      bool      `json:"draft"`
-		Number     int       `json:"number"`
-		Repository struct {
-			FullName string `json:"full_name"`
-		} `json:"repository"`
+		Merged bool `json:"merged"`
 	}{
-		Title:     "Test PR",
-		URL:       "https://api.github.com/repos/owner/repo/pulls/1",
-		HTMLURL:   "https://github.com/owner/repo/pull/1",
-		CreatedAt: now,
-		UpdatedAt: now,
-		State:     "open",
-		Merged:    false,
-		Draft:     true,
-		Number:    1,
-		Repository: struct {
-			FullName string `json:"full_name"`
-		}{
-			FullName: "owner/repo",
-		},
+		Merged: true,
 	}
 
 	userResponse := struct {
@@ -331,7 +309,13 @@ func TestPRClient_FetchTodaysPRs(t *testing.T) {
 	if pr.Title != "Test PR" {
 		t.Errorf("PR.Title = %v, want Test PR", pr.Title)
 	}
-	if !pr.Draft {
-		t.Errorf("PR.Draft = false, want true")
+	if !pr.Merged {
+		t.Errorf("PR.Merged = false, want true")
+	}
+	if pr.Draft {
+		t.Errorf("PR.Draft = true, want false")
+	}
+	if pr.Repository.FullName != "owner/repo" {
+		t.Errorf("PR.Repository.FullName = %v, want owner/repo", pr.Repository.FullName)
 	}
 }
