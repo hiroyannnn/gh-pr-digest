@@ -17,15 +17,19 @@ jobs:
           - os: windows
             arch: amd64
             ext: .exe
+            asset_name: gh-pr-digest.exe
           - os: darwin
             arch: amd64
             ext: ""
+            asset_name: gh-pr-digest
           - os: darwin
             arch: arm64
             ext: ""
+            asset_name: gh-pr-digest
           - os: linux
             arch: amd64
             ext: ""
+            asset_name: gh-pr-digest
 
     steps:
       - uses: actions/checkout@v4
@@ -41,14 +45,13 @@ jobs:
           GOOS: ${{ matrix.os }}
           GOARCH: ${{ matrix.arch }}
         run: |
-          output_name="gh-pr-digest-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}"
-          go build -o "$output_name"
+          go build -o "${{ matrix.asset_name }}"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: gh-pr-digest-${{ matrix.os }}-${{ matrix.arch }}
-          path: gh-pr-digest-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}
+          path: ${{ matrix.asset_name }}
 
   release:
     needs: build
@@ -75,15 +78,24 @@ jobs:
           echo "gh extension install hiroyannnn/gh-pr-digest" >> release_notes.md
           echo "\`\`\`" >> release_notes.md
 
+          # アーティファクトを適切なディレクトリに移動
+          mkdir -p release
+          for os_arch in dist/*; do
+            if [ -d "$os_arch" ]; then
+              os_arch_name=$(basename "$os_arch")
+              cp "$os_arch"/* "release/${os_arch_name}"
+            fi
+          done
+
           # リリースを作成
           gh release create "$tag_name" \
             --title "Release $tag_name" \
             --draft \
             --notes-file release_notes.md \
-            ./dist/**/*
+            ./release/*
 
       - name: Publish Release
-        if: success()  # 前のステップが全て成功した場合のみ実行
+        if: success()
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
