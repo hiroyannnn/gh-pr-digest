@@ -97,6 +97,17 @@ func (c *PRClient) FetchTodaysPRs(org, repo, since, until string) ([]PullRequest
 		return nil, fmt.Errorf("PRの取得に失敗: %w", err)
 	}
 
+	// デバッグ出力
+	c.debugPrint("検索結果: %d件\n", response.Total)
+	for i, item := range response.Items {
+		repoFullName := extractRepoFullName(item.URL)
+		c.debugPrint("PR %d: [%s] %s (#%d)\n", i+1, repoFullName, item.Title, item.Number)
+		c.debugPrint("  URL: %s\n", item.URL)
+		c.debugPrint("  HTML URL: %s\n", item.HTMLURL)
+		c.debugPrint("  Draft: %v\n", item.Draft)
+		c.debugPrint("  State: %s\n", item.State)
+	}
+
 	// 並列処理用のチャネルとエラーチャネルを作成
 	prChan := make(chan PullRequest, len(response.Items))
 	errChan := make(chan error, len(response.Items))
@@ -124,60 +135,69 @@ func (c *PRClient) FetchTodaysPRs(org, repo, since, until string) ([]PullRequest
 			semaphore <- struct{}{}        // セマフォ取得
 			defer func() { <-semaphore }() // セマフォ解放
 
-			repoPath := extractRepoFullName(item.URL)
-			prPath := fmt.Sprintf("repos/%s/pulls/%d", repoPath, item.Number)
-
-			var prDetail struct {
-				Title      string    `json:"title"`
-				URL        string    `json:"url"`
-				HTMLURL    string    `json:"html_url"`
-				CreatedAt  time.Time `json:"created_at"`
-				UpdatedAt  time.Time `json:"updated_at"`
-				State      string    `json:"state"`
-				Merged     bool      `json:"merged"`
-				Draft      bool      `json:"draft"`
-				Number     int       `json:"number"`
-				Repository struct {
-					FullName string `json:"full_name"`
-				} `json:"repository"`
-			}
-
-			err := c.client.Get(prPath, &prDetail)
-			if err != nil {
-				errChan <- fmt.Errorf("PR詳細の取得に失敗: %w", err)
+			repoFullName := extractRepoFullName(item.URL)
+			if repoFullName == "" {
+				c.debugPrint("リポジトリ名の抽出に失敗: %s\n", item.URL)
+				errChan <- fmt.Errorf("リポジトリ名の抽出に失敗: %s", item.URL)
 				return
 			}
 
 			// コミット情報を取得（必要な場合のみ）
 			hasMyCommit, err := c.hasMyCommitInRange(PullRequest{
-				Title:      prDetail.Title,
-				URL:        convertToPullsURL(item.URL),
-				HTMLURL:    prDetail.HTMLURL,
-				CreatedAt:  prDetail.CreatedAt,
-				UpdatedAt:  prDetail.UpdatedAt,
-				State:      prDetail.State,
-				Merged:     prDetail.Merged,
-				Draft:      prDetail.Draft || item.Draft,
-				Number:     prDetail.Number,
-				Repository: prDetail.Repository,
+				Title:     item.Title,
+				URL:       convertToPullsURL(item.URL),
+				HTMLURL:   item.HTMLURL,
+				CreatedAt: item.CreatedAt,
+				UpdatedAt: item.UpdatedAt,
+				State:     item.State,
+				Merged:    false,
+				Draft:     item.Draft,
+				Number:    item.Number,
+				Repository: struct {
+					FullName string `json:"full_name"`
+				}{
+					FullName: repoFullName,
+				},
 			}, since, until)
 			if err != nil {
+				c.debugPrint("コミット情報の取得に失敗: %v\n", err)
 				errChan <- fmt.Errorf("コミット情報の取得に失敗: %w", err)
 				return
 			}
 
-			if prDetail.Draft || item.Draft || hasMyCommit {
+			if item.Draft || hasMyCommit {
+				// マージ情報を取得（stateがclosedの場合のみ）
+				merged := false
+				if item.State == "closed" {
+					prPath := fmt.Sprintf("repos/%s/pulls/%d", repoFullName, item.Number)
+					c.debugPrint("マージ情報取得: %s\n", prPath)
+
+					var prDetail struct {
+						Merged bool `json:"merged"`
+					}
+					if err := c.client.Get(prPath, &prDetail); err != nil {
+						c.debugPrint("マージ情報の取得に失敗: %v\n", err)
+					} else {
+						merged = prDetail.Merged
+						c.debugPrint("マージ状態: %v\n", merged)
+					}
+				}
+
 				prChan <- PullRequest{
-					Title:      prDetail.Title,
-					URL:        convertToPullsURL(item.URL),
-					HTMLURL:    prDetail.HTMLURL,
-					CreatedAt:  prDetail.CreatedAt,
-					UpdatedAt:  prDetail.UpdatedAt,
-					State:      prDetail.State,
-					Merged:     prDetail.Merged,
-					Draft:      prDetail.Draft || item.Draft,
-					Number:     prDetail.Number,
-					Repository: prDetail.Repository,
+					Title:     item.Title,
+					URL:       convertToPullsURL(item.URL),
+					HTMLURL:   item.HTMLURL,
+					CreatedAt: item.CreatedAt,
+					UpdatedAt: item.UpdatedAt,
+					State:     item.State,
+					Merged:    merged,
+					Draft:     item.Draft,
+					Number:    item.Number,
+					Repository: struct {
+						FullName string `json:"full_name"`
+					}{
+						FullName: repoFullName,
+					},
 				}
 			}
 		}(item)
@@ -260,6 +280,7 @@ func (c *PRClient) hasMyCommitInRange(pr PullRequest, since, until string) (bool
 	// キャッシュチェック
 	c.commitCacheMux.RLock()
 	if result, ok := c.commitCache[cacheKey]; ok {
+		c.debugPrint("コミットキャッシュヒット: %s = %v\n", cacheKey, result)
 		c.commitCacheMux.RUnlock()
 		return result, nil
 	}
@@ -283,8 +304,12 @@ func (c *PRClient) hasMyCommitInRange(pr PullRequest, since, until string) (bool
 		return false, fmt.Errorf("日付の解析に失敗: %v, %v", err1, err2)
 	}
 
+	// デバッグ出力
+	c.debugPrint("日付範囲: %s 〜 %s\n", sinceTime.Format("2006-01-02 15:04:05"), untilTime.Format("2006-01-02 15:04:05"))
+
 	// PRの作成者が自分の場合はtrueを返す
 	if pr.IsAuthor() {
+		c.debugPrint("PRの作成者が自分です\n")
 		c.commitCacheMux.Lock()
 		c.commitCache[cacheKey] = true
 		c.commitCacheMux.Unlock()
@@ -294,8 +319,10 @@ func (c *PRClient) hasMyCommitInRange(pr PullRequest, since, until string) (bool
 	// ユーザー名の取得（キャッシュ使用）
 	username, err := c.getUser()
 	if err != nil {
+		c.debugPrint("ユーザー情報取得エラー: %v\n", err)
 		return false, err
 	}
+	c.debugPrint("ユーザー名: %s\n", username)
 
 	// PRのコミット情報を取得
 	var commits []struct {
@@ -320,14 +347,18 @@ func (c *PRClient) hasMyCommitInRange(pr PullRequest, since, until string) (bool
 	}
 
 	commitPath := fmt.Sprintf("repos/%s/pulls/%d/commits", pr.Repository.FullName, pr.Number)
+	c.debugPrint("コミット取得: %s\n", commitPath)
+
 	err = c.client.Get(commitPath, &commits)
 	if err != nil {
 		if strings.Contains(err.Error(), "404") {
+			c.debugPrint("コミット取得スキップ（404）: %s\n", commitPath)
 			c.commitCacheMux.Lock()
 			c.commitCache[cacheKey] = false
 			c.commitCacheMux.Unlock()
 			return false, nil
 		}
+		c.debugPrint("コミット取得エラー: %v\n", err)
 		return false, err
 	}
 
@@ -336,6 +367,7 @@ func (c *PRClient) hasMyCommitInRange(pr PullRequest, since, until string) (bool
 		if (commit.Author.Login == username || commit.Committer.Login == username) &&
 			commit.Commit.Author.Date.After(sinceTime) &&
 			commit.Commit.Author.Date.Before(untilTime) {
+			c.debugPrint("自分のコミットが見つかりました: %s (%s)\n", commit.Author.Login, commit.Commit.Author.Date)
 			c.commitCacheMux.Lock()
 			c.commitCache[cacheKey] = true
 			c.commitCacheMux.Unlock()
@@ -343,6 +375,7 @@ func (c *PRClient) hasMyCommitInRange(pr PullRequest, since, until string) (bool
 		}
 	}
 
+	c.debugPrint("自分のコミットは見つかりませんでした\n")
 	c.commitCacheMux.Lock()
 	c.commitCache[cacheKey] = false
 	c.commitCacheMux.Unlock()
