@@ -47,8 +47,8 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: binaries
-          path: gh-pr-digest-*
+          name: gh-pr-digest-${{ matrix.os }}-${{ matrix.arch }}
+          path: gh-pr-digest-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}
 
   release:
     needs: build
@@ -58,10 +58,9 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Download artifacts
+      - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          name: binaries
           path: dist
 
       - name: Create Release
@@ -81,5 +80,5 @@ jobs:
             --title "Release $tag_name" \
             --draft \
             --notes-file release_notes.md \
-            ./dist/*
+            ./dist/**/*
 
